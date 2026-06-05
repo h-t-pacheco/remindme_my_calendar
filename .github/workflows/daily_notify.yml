@@ -3,7 +3,12 @@ name: Daily Calendar Notification
 on:
   schedule:
     - cron: "30 12 * * 1-5"  # 09:30 AM ART (UTC-3), lunes a viernes
-  workflow_dispatch:       # permite correrlo manualmente
+  workflow_dispatch:
+    inputs:
+      force_payment_check:
+        description: "Forzar chequeo de pagos (true/false)"
+        required: false
+        default: "false"
 
 jobs:
   notify:
@@ -24,4 +29,5 @@ jobs:
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FORCE_PAYMENT_CHECK: ${{ github.event.inputs.force_payment_check }}
         run: uv run calendar_notifier.py

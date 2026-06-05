@@ -131,7 +131,8 @@ def main():
     send_telegram(telegram_token, telegram_chat_id, message)
 
     # Alerta de pagos si es el último día hábil del mes
-    if is_last_business_day_of_month(today):
+    force = os.environ.get("FORCE_PAYMENT_CHECK", "false").lower() == "true"
+    if force or is_last_business_day_of_month(today):
         warning = check_next_month_first_week(service, calendar_id, today)
         if warning:
             send_telegram(telegram_token, telegram_chat_id, warning)
