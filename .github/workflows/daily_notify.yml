@@ -2,7 +2,7 @@ name: Daily Calendar Notification
 
 on:
   schedule:
-    - cron: "0 12 * * *"  # 09:00 AM ART (UTC-3)
+    - cron: "30 12 * * 1-5"  # 09:30 AM ART (UTC-3), lunes a viernes
   workflow_dispatch:       # permite correrlo manualmente
 
 jobs:
