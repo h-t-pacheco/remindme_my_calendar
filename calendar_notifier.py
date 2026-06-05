@@ -9,7 +9,10 @@
 
 import os
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 import requests
 from google.oauth2 import service_account
@@ -27,7 +30,7 @@ def get_calendar_service():
 
 
 def get_todays_events(service, calendar_id: str) -> list[dict]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TZ)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=1)
 
@@ -62,9 +65,9 @@ def format_event(event: dict) -> str:
     start = event["start"]
 
     if "dateTime" in start:
-        dt = datetime.fromisoformat(start["dateTime"])
+        dt = datetime.fromisoformat(start["dateTime"]).astimezone(TZ)
         time_str = dt.strftime("%H:%M")
-        end_dt = datetime.fromisoformat(event["end"]["dateTime"])
+        end_dt = datetime.fromisoformat(event["end"]["dateTime"]).astimezone(TZ)
         end_str = end_dt.strftime("%H:%M")
         return f"🕐 {time_str}–{end_str}  {title}"
     else:
@@ -86,7 +89,7 @@ def main():
     service = get_calendar_service()
     events = get_todays_events(service, calendar_id)
 
-    today_str = format_date_es(datetime.now())
+    today_str = format_date_es(datetime.now(TZ))
 
     if not events:
         message = f"<b>Agenda del {today_str}</b>\n\nNo tienes eventos hoy."
