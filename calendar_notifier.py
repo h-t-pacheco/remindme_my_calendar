@@ -45,6 +45,18 @@ def get_todays_events(service, calendar_id: str) -> list[dict]:
     return result.get("items", [])
 
 
+DAYS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+MONTHS_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
+
+def format_date_es(dt: datetime) -> str:
+    day_name = DAYS_ES[dt.weekday()]
+    return f"{day_name} {dt.day} de {MONTHS_ES[dt.month - 1]} de {dt.year}"
+
+
 def format_event(event: dict) -> str:
     title = event.get("summary", "(Sin título)")
     start = event["start"]
@@ -54,9 +66,9 @@ def format_event(event: dict) -> str:
         time_str = dt.strftime("%H:%M")
         end_dt = datetime.fromisoformat(event["end"]["dateTime"])
         end_str = end_dt.strftime("%H:%M")
-        return f"  {time_str}–{end_str}  {title}"
+        return f"🕐 {time_str}–{end_str}  {title}"
     else:
-        return f"  Todo el día  {title}"
+        return f"🕐 Todo el día  {title}"
 
 
 def send_telegram(token: str, chat_id: str, text: str) -> None:
@@ -74,7 +86,7 @@ def main():
     service = get_calendar_service()
     events = get_todays_events(service, calendar_id)
 
-    today_str = datetime.now().strftime("%A %d de %B de %Y")
+    today_str = format_date_es(datetime.now())
 
     if not events:
         message = f"<b>Agenda del {today_str}</b>\n\nNo tienes eventos hoy."
