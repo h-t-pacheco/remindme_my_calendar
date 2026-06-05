@@ -9,17 +9,22 @@
 
 import os
 import json
+import calendar
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-
-TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 import requests
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-
+TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+
+DAYS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+MONTHS_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
 
 
 def get_calendar_service():
@@ -29,11 +34,7 @@ def get_calendar_service():
     return build("calendar", "v3", credentials=creds)
 
 
-def get_todays_events(service, calendar_id: str) -> list[dict]:
-    now = datetime.now(TZ)
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(days=1)
-
+def get_events_in_range(service, calendar_id: str, start: datetime, end: datetime) -> list[dict]:
     result = (
         service.events()
         .list(
@@ -48,11 +49,13 @@ def get_todays_events(service, calendar_id: str) -> list[dict]:
     return result.get("items", [])
 
 
-DAYS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-MONTHS_ES = [
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-]
+def is_last_business_day_of_month(today: datetime) -> bool:
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    candidate = today.replace(day=last_day)
+    # retroceder hasta encontrar un día hábil (lunes=0 ... viernes=4)
+    while candidate.weekday() > 4:
+        candidate -= timedelta(days=1)
+    return today.date() == candidate.date()
 
 
 def format_date_es(dt: datetime) -> str:
@@ -81,15 +84,41 @@ def send_telegram(token: str, chat_id: str, text: str) -> None:
     resp.raise_for_status()
 
 
+def check_next_month_first_week(service, calendar_id: str, today: datetime) -> str | None:
+    # primer día del mes siguiente
+    if today.month == 12:
+        first_of_next = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        first_of_next = today.replace(month=today.month + 1, day=1)
+
+    first_of_next = first_of_next.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_first_week = first_of_next + timedelta(days=7)
+
+    next_month_name = MONTHS_ES[first_of_next.month - 1].capitalize()
+    events = get_events_in_range(service, calendar_id, first_of_next, end_of_first_week)
+
+    if not events:
+        return (
+            f"⚠️ <b>Recordatorio de pagos</b>\n\n"
+            f"No hay eventos registrados en la primera semana de {next_month_name}.\n"
+            f"Validar el registro de pago de servicios para el 1° de {next_month_name}."
+        )
+    return None
+
+
 def main():
     calendar_id = os.environ["GOOGLE_CALENDAR_ID"]
     telegram_token = os.environ["TELEGRAM_BOT_TOKEN"]
     telegram_chat_id = os.environ["TELEGRAM_CHAT_ID"]
 
     service = get_calendar_service()
-    events = get_todays_events(service, calendar_id)
+    today = datetime.now(TZ)
 
-    today_str = format_date_es(datetime.now(TZ))
+    # Agenda del día
+    start_of_day = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    events = get_events_in_range(service, calendar_id, start_of_day, start_of_day + timedelta(days=1))
+
+    today_str = format_date_es(today)
 
     if not events:
         message = f"<b>Agenda del {today_str}</b>\n\nNo tienes eventos hoy."
@@ -100,6 +129,13 @@ def main():
         message = "\n".join(lines)
 
     send_telegram(telegram_token, telegram_chat_id, message)
+
+    # Alerta de pagos si es el último día hábil del mes
+    if is_last_business_day_of_month(today):
+        warning = check_next_month_first_week(service, calendar_id, today)
+        if warning:
+            send_telegram(telegram_token, telegram_chat_id, warning)
+
     print("Notificacion enviada.")
     print(message)
 
