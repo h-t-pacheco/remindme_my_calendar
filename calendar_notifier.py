@@ -18,7 +18,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES_READONLY = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES_WRITE = ["https://www.googleapis.com/auth/calendar.events"]
 
 DAYS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 MONTHS_ES = [
@@ -27,10 +28,11 @@ MONTHS_ES = [
 ]
 
 
-def get_calendar_service():
+def get_calendar_service(write=False):
     raw = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
     info = json.loads(raw)
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    scopes = SCOPES_WRITE if write else SCOPES_READONLY
+    creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
     return build("calendar", "v3", credentials=creds)
 
 
@@ -106,10 +108,52 @@ def check_next_month_first_week(service, calendar_id: str, today: datetime) -> s
     return None
 
 
+def parse_event_datetime(date_str: str, time_str: str) -> datetime:
+    parts = date_str.strip().split("/")
+    day = int(parts[0])
+    month = int(parts[1])
+    if len(parts) == 3:
+        year = int(parts[2])
+        if year < 100:
+            year += 2000
+    else:
+        year = datetime.now(TZ).year
+    hour, minute = map(int, time_str.strip().split(":"))
+    return datetime(year, month, day, hour, minute, tzinfo=TZ)
+
+
+def create_calendar_event(service, calendar_id: str, title: str, date_str: str, time_str: str) -> dict:
+    start = parse_event_datetime(date_str, time_str)
+    end = start + timedelta(hours=1)
+    body = {
+        "summary": title,
+        "start": {"dateTime": start.isoformat(), "timeZone": "America/Argentina/Buenos_Aires"},
+        "end": {"dateTime": end.isoformat(), "timeZone": "America/Argentina/Buenos_Aires"},
+    }
+    return service.events().insert(calendarId=calendar_id, body=body).execute()
+
+
 def main():
     calendar_id = os.environ["GOOGLE_CALENDAR_ID"]
     telegram_token = os.environ["TELEGRAM_BOT_TOKEN"]
     telegram_chat_id = os.environ["TELEGRAM_CHAT_ID"]
+    mode = os.environ.get("MODE", "notify")
+
+    if mode == "create_event":
+        title = os.environ["EVENT_TITLE"]
+        date_str = os.environ["EVENT_DATE"]
+        time_str = os.environ["EVENT_TIME"]
+        service = get_calendar_service(write=True)
+        event = create_calendar_event(service, calendar_id, title, date_str, time_str)
+        start = parse_event_datetime(date_str, time_str)
+        msg = (
+            f"✅ <b>Evento creado</b>\n\n"
+            f"📌 {title}\n"
+            f"📅 {format_date_es(start)} a las {time_str}"
+        )
+        send_telegram(telegram_token, telegram_chat_id, msg)
+        print(f"Evento creado: {event.get('htmlLink')}")
+        return
 
     service = get_calendar_service()
     today = datetime.now(TZ)

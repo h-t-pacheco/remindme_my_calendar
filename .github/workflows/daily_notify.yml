@@ -9,6 +9,22 @@ on:
         description: "Forzar chequeo de pagos (true/false)"
         required: false
         default: "false"
+      mode:
+        description: "Modo: notify o create_event"
+        required: false
+        default: "notify"
+      event_title:
+        description: "Título del evento (solo para create_event)"
+        required: false
+        default: ""
+      event_date:
+        description: "Fecha del evento DD/MM o DD/MM/YYYY (solo para create_event)"
+        required: false
+        default: ""
+      event_time:
+        description: "Hora del evento HH:MM (solo para create_event)"
+        required: false
+        default: ""
 
 jobs:
   notify:
@@ -30,4 +46,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FORCE_PAYMENT_CHECK: ${{ github.event.inputs.force_payment_check }}
+          MODE: ${{ github.event.inputs.mode || 'notify' }}
+          EVENT_TITLE: ${{ github.event.inputs.event_title }}
+          EVENT_DATE: ${{ github.event.inputs.event_date }}
+          EVENT_TIME: ${{ github.event.inputs.event_time }}
         run: uv run calendar_notifier.py
